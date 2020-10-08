@@ -1,26 +1,58 @@
-import React from 'react';
-import logo from './logo.svg';
+import React, { useState, useEffect, useCallback } from 'react';
 import './App.css';
+import callGraphQL, { subscribeGraphQL } from './api/graphql-api';
+import { listTodos } from './graphql/queries';
+import { ListTodosQuery, OnCreateTodoSubscription } from './API';
+import Todo, { mapListTodosQuery, mapOnCreateTodoSubscription } from './api/todo';
+import { onCreateTodo } from './graphql/subscriptions';
+import CreateTodo from './components/CreateTodo';
+import { withAuthenticator } from '@aws-amplify/ui-react'
 
-function App() {
+const App: React.FC = () => {
+  const [todos, setTodos] = useState<Todo[]>();
+
+  useEffect(() => {
+    const getTodos = async () => {
+      try {
+        const todosData = await callGraphQL<ListTodosQuery>(listTodos);
+        const todos = mapListTodosQuery(todosData);
+    
+        setTodos(todos);
+      } catch (error) {
+        console.error("Error fetching todos", error);
+      }
+    }
+    
+    getTodos();
+  }, []);
+
+  const onCreateTodoHandler = useCallback((
+    createTodoSubscription: OnCreateTodoSubscription
+  ) => {
+    const todo = mapOnCreateTodoSubscription(createTodoSubscription);
+    setTodos([...todos, todo]);
+  }, [todos]);
+
+  useEffect(() => {
+    const subscription = subscribeGraphQL<OnCreateTodoSubscription>(
+      onCreateTodo,
+      onCreateTodoHandler
+    );
+
+    return () => subscription.unsubscribe();
+  }, [todos, onCreateTodoHandler]);
+
   return (
     <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.tsx</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
+      <CreateTodo />
+        {todos?.map((t: Todo) => (
+          <div key={t.id}>
+            <h2>{t.name}</h2>
+            <p>{t.description}</p>
+          </div>
+        ))}
     </div>
   );
 }
 
-export default App;
+export default withAuthenticator(App);
